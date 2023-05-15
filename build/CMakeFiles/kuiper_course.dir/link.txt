@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -fopenmp -march=native CMakeFiles/kuiper_course.dir/main.cpp.o -o /home/roger/infer/KuiperKuiper/bin/kuiper_course  -lglog -lpthread -lgtest -larmadillo -lblas -llapack 

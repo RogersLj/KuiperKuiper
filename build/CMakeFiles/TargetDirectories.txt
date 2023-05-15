@@ -1,8 +1,0 @@
-/home/roger/infer/KuiperKuiper/build/CMakeFiles/kuiper_course.dir
-/home/roger/infer/KuiperKuiper/build/CMakeFiles/test.dir
-/home/roger/infer/KuiperKuiper/build/CMakeFiles/edit_cache.dir
-/home/roger/infer/KuiperKuiper/build/CMakeFiles/rebuild_cache.dir
-/home/roger/infer/KuiperKuiper/build/test/CMakeFiles/test_kuiper_course.dir
-/home/roger/infer/KuiperKuiper/build/test/CMakeFiles/test.dir
-/home/roger/infer/KuiperKuiper/build/test/CMakeFiles/edit_cache.dir
-/home/roger/infer/KuiperKuiper/build/test/CMakeFiles/rebuild_cache.dir

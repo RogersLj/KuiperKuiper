@@ -69,7 +69,6 @@ public:
     // 返回张量实际用 arma::fcube 存储的形状 - HWC
     const std::vector<uint32_t>& raw_shape() const;
 
-
     // 返回张量的原始数据
     arma::fcube& data();
 

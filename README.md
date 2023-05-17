@@ -21,14 +21,32 @@ Layer 类包含算子的实际计算
 属性和计算分离
 需要通过Operator初始化
 
-每一个算子，名字相同，但是有不一样的属性
+每一个算子，名字相同，但是有不一样的属性，属性存在operator里
 也就是在一个计算图里，op不一样，但是op的计算是固定的
 有多个conv算子，每个算子属性不一样，也就是需要构造多个Operator
 但是每个conv调用的计算forward是一样的，因此只需要初始化构造一个layer
-（注册表是这个？）
 
-### 算子注册
+## fourth 
+算子注册
 首先根据计算图里算子节点的名字字符串，自动化初始化每个算子
 
 注册表
 typedef std::map<OpType, Creator> CreateRegistry;
+
+key是OpType，value是初始化的layer
+如果没有在注册表里，第一次就会进行注册
+之后面对相同的OpType，只需要查找注册表即可得到对应forward函数
+
+- 工厂模式
+可以根据不同的类型创建不同的类型对象
+这里是根据不同的OpType创建不同的Layer
+
+- 单例模式
+它确保一个类只有一个实例，并提供对该实例的全局访问点。
+一般用static关键字实现，这里注册表在全局只需要初始化一次
+
+静态函数只属于类,不属于任何对象。静态函数只能访问静态成员变量和其他静态函数。
+
+算子在定义的时候就会自动注册
+
+当调用`LayerRegisterer::CreateLayer(const std::shared_ptr<Operator> &op)`函数的时候会从注册表里找到对应layer的creator并创建返回

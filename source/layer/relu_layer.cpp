@@ -2,6 +2,7 @@
 #include "ops/relu_op.hpp"
 #include "layer/relu_layer.hpp"
 #include "data/tensor_util.hpp"
+#include "factory/layer_factory.hpp"
 
 namespace kuiper_infer {
     
@@ -53,5 +54,10 @@ std::shared_ptr<Layer> ReLULayer::CreateInstance(const std::shared_ptr<Operator>
     std::shared_ptr<Layer> relu_layer = std::make_shared<ReLULayer>(op);
     return relu_layer;
 }
+
+
+// 定已完成之后直接调用LayerRegistererWrapper类初始化实例kReLULayer
+// 初始化时会直接在注册表注册
+LayerRegisterWrapper kReLULayer(OpType::kOperatorReLU, ReLULayer::CreateInstance);
 
 }

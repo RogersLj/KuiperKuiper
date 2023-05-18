@@ -155,22 +155,23 @@ float& Tensor<float>::at(uint32_t channel, uint32_t row, uint32_t col) {
     return this->data_.at(row, col, channel);
 }
 
+//(padding_left,padding_right,padding_top,padding_bottom)
 void Tensor<float>::Padding(const std::vector<uint32_t>& pads, float padding_value) {
     CHECK(!this->data_.empty());
     CHECK_EQ(pads.size(), 4);
 
-    uint32_t padding_up = pads.at(0);
-    uint32_t padding_bottom = pads.at(1);
-    uint32_t padding_left = pads.at(2);
-    uint32_t padding_right = pads.at(3);
+    uint32_t padding_left = pads.at(0);
+    uint32_t padding_right = pads.at(1);
+    uint32_t padding_top = pads.at(2);
+    uint32_t padding_bottom = pads.at(3);
 
-    arma::fcube new_data(this->rows() + padding_up + padding_bottom, this->cols() + padding_left + padding_right, this->channels());
+    arma::fcube new_data(this->rows() + padding_top + padding_bottom, this->cols() + padding_left + padding_right, this->channels());
 
     new_data.fill(padding_value);
 
     // Q.subcube( first_row, first_col, first_slice, last_row, last_col, last_slice )
-    new_data.subcube(padding_up, padding_left, 0, 
-                    padding_up + this->rows() - 1, padding_left + this->cols() - 1, new_data.n_slices - 1) = this->data_;
+    new_data.subcube(padding_top, padding_left, 0, 
+                    padding_top + this->rows() - 1, padding_left + this->cols() - 1, new_data.n_slices - 1) = this->data_;
 
     this->data_ = std::move(new_data);
 }

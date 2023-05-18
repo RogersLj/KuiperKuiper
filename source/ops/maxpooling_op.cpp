@@ -1,4 +1,4 @@
-#include "ops/maxpooling.hpp"
+#include "ops/maxpooling_op.hpp"
 
 namespace kuiper_infer {
     

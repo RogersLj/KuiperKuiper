@@ -50,3 +50,10 @@ key是OpType，value是初始化的layer
 算子在定义的时候就会自动注册
 
 当调用`LayerRegisterer::CreateLayer(const std::shared_ptr<Operator> &op)`函数的时候会从注册表里找到对应layer的creator并创建返回
+
+
+## fifth
+添加算子sigmoid和maxpooling
+
+关键字explicit的作用是防止不必要的类型转换和隐式构造函数调用，从而提高代码的可读性和安全性。
+构造函数 "= default" 语法，表示该构造函数应该由编译器自动生成。

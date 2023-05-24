@@ -57,3 +57,12 @@ key是OpType，value是初始化的layer
 
 关键字explicit的作用是防止不必要的类型转换和隐式构造函数调用，从而提高代码的可读性和安全性。
 构造函数 "= default" 语法，表示该构造函数应该由编译器自动生成。
+
+## sixth
+
+包装 pnnx 的 ir
+pnnx::Operator -> RuntimeOperator
+pnnx::Oprand -> RuntimeOpearnd
+pnnx::Paramater -> RumtimeParameter
+pnnx::Attribute -> RuntimeAttribute
+pnnx::Graph -> RuntimeGraph 

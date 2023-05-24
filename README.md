@@ -66,3 +66,11 @@ pnnx::Oprand -> RuntimeOpearnd
 pnnx::Paramater -> RumtimeParameter
 pnnx::Attribute -> RuntimeAttribute
 pnnx::Graph -> RuntimeGraph 
+
+## seventh
+
+PNNX 里除了算子,还有一些表达式的运算节点
+例如 ADD, MUL
+这一类没有对应的算子,在PNNX的param里是已表达式的形式表示
+因此需要将表达式节点解析为RuntimeGraph
+

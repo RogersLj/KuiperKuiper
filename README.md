@@ -74,3 +74,12 @@ PNNX 里除了算子,还有一些表达式的运算节点
 这一类没有对应的算子,在PNNX的param里是已表达式的形式表示
 因此需要将表达式节点解析为RuntimeGraph
 
+并注册expression layer
+回顾一下如何注册一个新的layer：
+1. 首先定义op，op是layer的属性信息，就是除了计算之外的所有信息，都应该在op初始化或赋值。对于expression，op应该包括构建好的子计算图，也就是expression的计算图。使用expression进行初始化。
+
+任何op都继承自operator类，operator在初始化的时候需要传入OpType，所以注册op时需要在op.hpp里添加新的optype
+
+头文件定义后，去源文件定义每个函数的实现
+
+2. 然后定义layer,layer层的构造函数，是通过op进行初始化。同时需要定义前向计算的函数forward。还需要有一个注册函数。这个函数在layer的函数实现进行layer的注册。

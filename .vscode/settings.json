@@ -65,6 +65,7 @@
         "typeinfo": "cpp",
         "bit": "cpp",
         "codecvt": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "armadillo": "cpp"
     }
 }

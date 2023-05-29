@@ -6,9 +6,9 @@
 #include <utility>
 
 namespace kuiper_infer {
-
-typedef std::pair<uint32_t, uint32_t> Shape;
     
+typedef std::pair<uint32_t, uint32_t> Shape;
+
 class MaxPoolingOp : public Operator {
 
 public:
@@ -38,3 +38,5 @@ private:
 }
 
 #endif
+
+

@@ -10,6 +10,7 @@ enum class OpType {
     kOperatorSigmoid = 1,
     kOperatorMaxPooling = 2,
     kOperatorExpression = 3,
+    kOperatorConv = 4,
 };
 
 // 所有算子的父类

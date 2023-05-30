@@ -22,6 +22,7 @@ class Tensor<uint8_t> {
 template <>
 class Tensor<float> {
 public:
+    // 必须显示的构造函数初始化 
     explicit Tensor() = default;
 
     // 构造函数 - CHW
@@ -66,7 +67,8 @@ public:
     // 返回张量形状 - CHW
     std::vector<uint32_t> shape() const;
 
-    // 返回张量实际用 arma::fcube 存储的形状 - HWC
+    // 返回张量的逻辑形状 - 去掉等于1的维数,可知道一维或二维张量
+    //(1, 32, 32) - (32, 32) - 实际的形状
     const std::vector<uint32_t>& raw_shape() const;
 
     // 返回张量的原始数据
@@ -90,11 +92,11 @@ public:
     // 初始化张量值
     void Fill(float value);
 
-    // 用数组初始化所有值
+    // 用数组初始化所有值 - 默认习惯是行优先
     void Fill(const std::vector<float>& values, bool row_major = true);
 
-    // 返回张量所有值
-    std::vector<float> values(bool row_major = true);
+    // 返回所有数据,默认行优先
+    std::vector<float> Values(bool row_major = true);
 
     // 初始化
     void Ones();
@@ -106,9 +108,12 @@ public:
     // 打印张量
     void Show();
  
-    // 对张量进行 reshape 根据列主序或行主序
+    // 对张量进行 reshape - 底层数据排布发生改变
+    // 因为底层存储是列优先
     void Reshape(const std::vector<uint32_t>& shape, bool row_major = false);
 
+    
+    
     // 展平张量 - 默认 fcube 是列主序的
     void Flatten(bool row_major = false);
 

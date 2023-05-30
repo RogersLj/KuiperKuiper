@@ -5,26 +5,39 @@
 
 namespace kuiper_infer {
 
+// 默认所有张量都是三维的,没有的维度也需要用1表示,因为arma底层是这样初始化的
+// raw_shape_ 存储的是最底层的逻辑形状
+// 因为fcube按照HWC的形状来分,所以这里的raw_shape_和data_的shape不一样
 Tensor<float>::Tensor(uint32_t channels, uint32_t rows, uint32_t cols) {
     // fcube 初始化 - HWC - 内存排布 列主序
     data_ = arma::fcube(rows, cols, channels);
     if (channels == 1 && rows == 1) {
-        // 一维张量
+        // 一维张量 - 看起来是个行向量
         this->raw_shape_ = std::vector<uint32_t>{cols};
     } else if (channels == 1) {
         // 二维张量
         this->raw_shape_ = std::vector<uint32_t>{rows, cols};
     } else {
         // 三维张量
-        this->raw_shape_ = std::vector<uint32_t>{rows, cols, channels};
+        this->raw_shape_ = std::vector<uint32_t>{channels, rows, cols};
     }
 }
 
+// 习惯用CHW初始化 - 允许直接​初始化一维或二维张量
 Tensor<float>::Tensor(const std::vector<uint32_t>& shape) {
-    CHECK(shape.size() == 3);
-    uint32_t channels = shape.at(0);
-    uint32_t rows = shape.at(1);
-    uint32_t cols = shape.at(2);
+    CHECK(!shape.empty() && shape.size() <= 3);
+    
+    uint32_t dim = shape.size(); // 维度
+    uint32_t remains = 3 - dim; // 要补全的维度
+
+    std::vector<uint32_t> new_shape(3, 1); // 默认形状是三维,然后将维度真实值补全
+
+    std::copy(shape.begin(), shape.end(), new_shape.begin() + remains);
+    // 从后往前补全 
+    
+    uint32_t channels = new_shape.at(0);
+    uint32_t rows = new_shape.at(1);
+    uint32_t cols = new_shape.at(2);
 
     data_ = arma::fcube(rows, cols, channels);
 
@@ -33,14 +46,14 @@ Tensor<float>::Tensor(const std::vector<uint32_t>& shape) {
     } else if (channels == 1) {
         this->raw_shape_ = std::vector<uint32_t>{rows, cols};
     } else {
-        this->raw_shape_ = std::vector<uint32_t>{rows, cols, channels};
+        this->raw_shape_ = std::vector<uint32_t>{channels, rows, cols};
     }
 }
 
 Tensor<float>::Tensor(const Tensor<float>& tensor) {
     // 传入 tensor 引用，&tensor 实际 tensor 地址
     if (this != &tensor) {
-        this->data_ = tensor.data_;
+        this->data_ = std::move(tensor.data_);
         this->raw_shape_ = tensor.raw_shape_;
     }
 }
@@ -54,7 +67,7 @@ Tensor<float>::Tensor(Tensor<float>&& tensor) noexcept {
 
 Tensor<float>& Tensor<float>::operator=(const Tensor<float>& tensor) {
     if (this != &tensor) {
-        this->data_ = tensor.data_;
+        this->data_ = std::move(tensor.data_);
         this->raw_shape_ = tensor.raw_shape_;
     }
     return *this;
@@ -117,7 +130,7 @@ float& Tensor<float>::index(uint32_t offset) {
 }
 
 
-// t.shape() - CHW
+// t.shape() - CHW - 不是逻辑形状,为1的维度也同样返回
 std::vector<uint32_t> Tensor<float>::shape() const {
     CHECK(!this->data_.empty());
     return {this->channels(), this->rows(), this->cols()};
@@ -188,15 +201,15 @@ void Tensor<float>::Fill(const std::vector<float>& values, bool row_major) {
     CHECK_EQ(values.size(), total_elems);
 
     if (row_major) {
-        const uint32_t rows = this->data_.n_rows;
-        const uint32_t cols = this->data_.n_cols;
-        const uint32_t channels = this->data_.n_slices;
+        const uint32_t channels = this->channels();
+        const uint32_t rows = this->rows();
+        const uint32_t cols = this->cols();
         const uint32_t planes = rows * cols;
 
         for (uint32_t i = 0; i < channels; ++i) {
-            auto& channel_data = this->data_.slice(i);
-            const arma::fmat& channel_data_t = arma::fmat(values.data() + i * planes, this->cols(), this->rows());
-            channel_data = channel_data_t.t(); // fmat默认是列主序的
+            auto& cur_channel = this->data_.slice(i);
+            const arma::fmat& channel_data = arma::fmat(values.data() + i * planes, cols, rows);
+            cur_channel = channel_data.t(); // 转置
         }
     } else {
         std::copy(values.begin(), values.end(), this->data_.memptr());
@@ -248,18 +261,19 @@ void Tensor<float>::Reshape(const std::vector<uint32_t>& shape, bool row_major) 
 
     std::vector<float> values;
     if (row_major) {
-        values = this->values(true);
+        values = this->Values(true); // 把数据按行展开存放在values中
     }
-    if (shape.size() == 3) {
-    // fcube 默认是 HCW 
-    this->data_.reshape(shape.at(1), shape.at(2), shape.at(0));
-    this->raw_shape_ = {shape.at(0), shape.at(1), shape.at(2)};
-    } else if (shape.size() == 2) {
-        this->data_.reshape(shape.at(0), shape.at(1), 1);
-        this->raw_shape_ = {shape.at(0), shape.at(1)};
-    } else {
+    if (shape.size() == 1) {
+        // fcube 默认是 HWC - 对data_ reshape
+        // 传入的是 CHW
         this->data_.reshape(1, shape.at(0), 1);
         this->raw_shape_ = {shape.at(0)};
+    } else if (shape.size() == 2) {
+        this->data_.reshape(shape.at(0), shape.at(1), 1);
+        this->raw_shape_ = {shape.at(1), shape.at(2)};
+    } else {
+        this->data_.reshape(shape.at(1), shape.at(2), shape.at(0));
+        this->raw_shape_ = {shape.at(0), shape.at(1), shape.at(2)};
     }
 
     if (row_major) {
@@ -272,7 +286,7 @@ const float* Tensor<float>::raw_ptr() const {
   return this->data_.memptr();
 }
 
-std::vector<float> Tensor<float>::values(bool row_major) {
+std::vector<float> Tensor<float>::Values(bool row_major) {
     CHECK_EQ(this->data_.empty(), false);
     std::vector<float> values(this->data_.size());
 

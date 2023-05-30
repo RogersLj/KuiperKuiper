@@ -14,6 +14,21 @@
 
 namespace kuiper_infer {
     
+
+// 因为在没有做任何并行优化的情况下，一个batch的数据是一个一个处理的
+// 假设batch里每个数据大小都一样，因此在前向推理的过程中，中间输出结果的大小也是固定的，只是值不一样
+// 为了节省时间,在第一次构建计算图的时候分配好存储中间数据的内存空间
+class RuntimeGraphShape {
+
+public:
+
+    static void InitOpeartorInputTensor(const std:: vector<std::shared_ptr<RuntimeOperator>>& operators);
+
+
+    static void InitOperatorOutputTensor(const std::vector<pnnx::Operator*> &pnnx_operators, const std::vector<std::shared_ptr<RuntimeOperator>>& operators);
+
+};
+
 // 定义的计算图结构
 class RuntimeGraph {
 
@@ -23,6 +38,7 @@ public:
 初始化计算图
 @return 初始化成功返回true
 */
+// 主要是初始化operator,operands,attrs,params
     bool Init();
 
 /*
@@ -30,7 +46,7 @@ public:
 @param input_name 输入名字
 @param output_name 输出名字
 */
-    // void Build(const std::string& input_name, const std::string& output_name);
+    void Build(const std::string& input_name, const std::string& output_name); // 根据输入节点和输出节点构建完整计算图
 
 
 /*

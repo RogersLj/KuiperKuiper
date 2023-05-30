@@ -16,7 +16,7 @@ struct RuntimeOperand {
     std::string name; // 操作数名
     std::vector<int32_t> shape; // 操作数的形状
     RuntimeDataType type = RuntimeDataType::kTypeUnknown; // 操作数的类型 - float
-    std::vector<std::shared_ptr<Tensor<float>>> tensors; // 操作数的张量 - 实际数据
+    std::vector<std::shared_ptr<Tensor<float>>> datas; // 操作数的张量 - 运行时存储实际数据 - 一个batch的数据
 };
 
 }

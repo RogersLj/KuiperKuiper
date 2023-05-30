@@ -7,6 +7,165 @@
 #include "factory/layer_factory.hpp"
 
 namespace kuiper_infer {
+
+void RuntimeGraphShape::InitOpeartorInputTensor(const std:: vector<std::shared_ptr<RuntimeOperator>>& operators) {
+    if (operators.empty()) {
+        LOG(ERROR) << "operators for init is empty";
+        return;
+    }
+
+    for (const auto& op : operators) {
+        // 遍历所有的operators,并初始化input_oprands
+        if (op->input_operands.empty()) {
+            continue; // 输出节点就没有输入操作数
+        } else {
+            const std::map<std::string, std::shared_ptr<RuntimeOperand>>& input_operands_map = op->input_operands;
+
+            for (const auto& input_operand_iter : input_operands_map) {
+                const auto& input_operand_name = input_operand_iter.first;
+                const auto& input_operand = input_operand_iter.second;
+                const auto& type = input_operand->type;
+                CHECK(type == RuntimeDataType::kTypeFloat32) << "The inference graph only support float32 data type now";
+                const auto& input_operand_shape = input_operand->shape;
+                auto& input_datas = input_operand->datas;
+
+                CHECK(!input_operand_shape.empty());
+                const int32_t batch_size = input_operand_shape.at(0);
+
+                CHECK(batch_size >= 0) << "Dynamic batch_size size is not supported!";
+
+                CHECK(input_operand_shape.size() == 2 ||
+                        input_operand_shape.size() == 4 ||
+                        input_operand_shape.size() == 3)
+                        << "Unsupported tensor shape sizes: " << input_operand_shape.size();
+
+                // 第一次运行，没有初始化，初始化一个batch_size的数据空间
+                // 第二次运行，如果数据已经填充，检查填充的数据大小和预期是否一致
+                if (!input_datas.empty()) {
+                    CHECK(input_datas.size() == batch_size) << "The size of input data is not equal to the batch_size size!";
+
+                    for (int32_t i = 0; i < batch_size; ++i) {
+                        const std::vector<uint32_t>& input_data_shape = input_datas.at(i)->shape(); // CHW
+                        CHECK(input_data_shape.size() == 3) << "The original shape of input data is not 3!";
+
+                        // input_operand_shape : (batch_size, elemsize) 一维的
+                        // input_operand_shape : (batch_size, rows, cols) 二维的
+                        // input_operand_shape : (batch_size, channels, rows, cols) 三维的
+                        // input_data_shape : (channels, rows, cols) - 看起来始终是三维的
+                        // input_data_shape : (1, rows, cols) - 二维时
+                        // input_data_shape : (1, 1, cols) - 一维时
+                        if (input_operand_shape.size() == 4) {
+                            CHECK(input_data_shape.at(0) == input_operand_shape.at(1) && input_data_shape.at(1) == input_operand_shape.at(2) && input_data_shape.at(2) == input_operand_shape.at(3));
+                        } else if (input_operand_shape.size() == 2) {
+                            // 一维数据
+                            CHECK(input_data_shape.at(2) == input_operand_shape.at(1) && input_data_shape.at(0) == input_data_shape.at(1) == 1);
+                        } else {
+                            // 二维数据
+                            CHECK(input_data_shape.at(0) == 1 && input_data_shape.at(1) == input_operand_shape.at(1) && input_data_shape.at(2) == input_operand_shape.at(2));
+                        }   
+                    }
+                } else {
+                    // 第一次执行，分配空间
+                    input_datas.resize(batch_size);
+                    for (int32_t i = 0; i < batch_size; ++i) {
+                        if (input_operand_shape.size() == 4) {
+                            // 三维数据
+                            input_datas.at(i) = std::make_shared<Tensor<float>>(input_operand_shape.at(1), input_operand_shape.at(2), input_operand_shape.at(3));
+                        } else if (input_operand_shape.size() == 2) {
+                            // 一维数据
+                            input_datas.at(i) = std::make_shared<Tensor<float>>(1, 1, input_operand_shape.at(1));
+                        } else {
+                            // 一维数据
+                            input_datas.at(i) = std::make_shared<Tensor<float>>(1, input_operand_shape.at(1), input_operand_shape.at(2));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 因为初始化RuntimeOperator的时候对于operator的输出，只添加了节点的输出名字和对应节点，没有初始化output_operand
+// 因此这里需要用原本的pnxx图里的operator信息来为输出分配空间，并初始化节点的output_operand
+void RuntimeGraphShape::InitOperatorOutputTensor(const std::vector<pnnx::Operator*> &pnnx_operators, const std::vector<std::shared_ptr<RuntimeOperator>>& operators) {
+
+    CHECK(!pnnx_operators.empty() && !operators.empty());
+    CHECK(pnnx_operators.size() == operators.size());
+
+    for (int32_t i = 0; i < pnnx_operators.size(); ++i) {
+        // 当前operator的输出操作数，每一个操作数是一个batch_size的大小
+        const std::vector<pnnx::Operand*> operands = pnnx_operators.at(i)->outputs;
+
+        CHECK(operands.size() <= 1) << "Only support one output now";
+        if (operands.empty()) {
+            continue;
+        }
+
+        CHECK(operands.size() == 1) << "Only support one output now";
+
+        pnnx::Operand* operand = operands.front();
+        const auto& runtime_operator = operators.at(i);
+        CHECK(operand != nullptr) << "operand is nullptr";
+        const std::vector<int32_t> shape = operand->shape;
+        const auto& output_operand = runtime_operator->output_operand;
+
+        const int32_t batch_size = shape.at(0); // batch_size大小
+        CHECK(batch_size >= 0) << "Dynamic shape is not supported now";
+        CHECK(shape.size() == 2 || shape.size() == 3 || shape.size() == 4) << "Dynamic shape is not supported now";
+
+        if (!output_operand) {
+            // 还没有初始化节点的输出
+            std::shared_ptr<RuntimeOperand> runtime_operand = std::make_shared<RuntimeOperand>();
+
+            runtime_operand->shape = shape;
+            runtime_operand->name = operand->name + "_output";
+            runtime_operand->type = RuntimeDataType::kTypeFloat32;
+
+            for (int32_t j = 0; j < batch_size; j ++) {
+                if (shape.size() == 4) {
+                    runtime_operand->datas.push_back(std::make_shared<Tensor<float>>(shape.at(1), shape.at(2), shape.at(3)));
+                } else if (shape.size() == 2) {
+                    runtime_operand->datas.push_back(std::make_shared<Tensor<float>>(1, 1, shape.at(1)));
+                } else {
+                    runtime_operand->datas.push_back(std::make_shared<Tensor<float>>(1, shape.at(1), shape.at(2)));
+                }
+            }
+
+            runtime_operator->output_operand = runtime_operand;
+        } else {
+            // 检查大小是否一致
+            CHECK(output_operand->type == RuntimeDataType::kTypeFloat32);
+            CHECK(output_operand->shape == shape);
+
+            for (int32_t j = 0; j < batch_size; j ++) {
+                const std::vector<uint32_t>& operand_shape = output_operand->datas.at(j)->shape();
+                if (shape.size() == 4) {
+                    if (operand_shape.at(0) != shape.at(1) || operand_shape.at(1) != shape.at(2) || operand_shape.at(2) != shape.at(3)) {
+                        DLOG(WARNING) << "The shape of calculated output tensor do not match with output operand";
+                    }
+                    const auto& new_shape = std::vector<uint32_t> {(uint32_t)shape.at(1), (uint32_t)shape.at(2), (uint32_t)shape.at(3)};
+                    // shape是pnnx训练得到的真实值
+                    output_operand->datas.at(j)->Reshape(new_shape);
+                } else if (shape.size() == 2) {
+                    if (operand_shape.at(0) != 1 || operand_shape.at(1) != 1 || operand_shape.at(2) != shape.at(1)) {
+                        DLOG(WARNING) << "The shape of calculated output tensor do not match with output operand";
+                    }
+                    const auto& new_shape = std::vector<uint32_t> {(uint32_t)1, (uint32_t)1, (uint32_t)shape.at(1)};
+                    output_operand->datas.at(j)->Reshape(new_shape);
+                } else {
+                    if (operand_shape.at(0) != 1 || operand_shape.at(1) != shape.at(1) || operand_shape.at(2) != shape.at(2)) {
+                        DLOG(WARNING) << "The shape of calculated output tensor do not match with output operand";
+                    }
+                    const auto& new_shape = std::vector<uint32_t> {(uint32_t)1, (uint32_t)shape.at(1), (uint32_t)shape.at(2)};
+                    output_operand->datas.at(j)->Reshape(new_shape);
+                }
+            }
+        }
+
+    }
+
+}
+
     
 RuntimeGraph::RuntimeGraph(std::string param_path, std::string bin_path) : param_path_(std::move(param_path)), bin_path_(std::move(bin_path)) {
     std::cout << "param_path: " << this->param_path_ << std::endl;
@@ -292,40 +451,45 @@ const std::vector<std::shared_ptr<RuntimeOperator>> RuntimeGraph::operators() co
     return this->operators_;
 }
 
-// //void Build(const std::string& input_name, const std::string& output_name);
-// void RuntimeGraph::Build(const std::string& input_name, const std::string& output_name) {
-//     if (graph_state_ == GraphState::kToInit) {
-//         bool init_graph = Init();
-//         LOG_IF(FATAL, !init_graph) << "Init graph failed!";
-//     }
+//void Build(const std::string& input_name, const std::string& output_name);
+void RuntimeGraph::Build(const std::string& input_name, const std::string& output_name) {
+    if (graph_state_ == GraphState::kToInit) {
+        bool init_graph = Init();
+        LOG_IF(FATAL, !init_graph) << "Init graph failed!";
+    }
 
-//     // 初始化之后,得到了所有的operators和operands
-//     // 以及算子之间的关系
+    // 初始化之后,得到了所有的operators和operands
+    // 以及算子之间的关系
 
-//     CHECK(graph_state_ >= GraphState::kToBuild)
-//         << "Graph status error, current state is " << int(graph_state_);
+    CHECK(graph_state_ >= GraphState::kToBuild)
+        << "Graph status error, current state is " << int(graph_state_);
 
-//     LOG_IF(FATAL, this->operators_.empty())
-//           << "Graph operators is empty, init may failed";
+    LOG_IF(FATAL, this->operators_.empty())
+          << "Graph operators is empty, init may failed";
 
-//     this->input_operators_map_.clear();
-//     this->output_operators_map_.clear();
+    this->input_operators_map_.clear();
+    this->output_operators_map_.clear();
 
-//     for (const auto& op : this->operators_) {
-//         if (op->type == "pnnx.Input") {
-//             this->input_operators_map_.insert({op->name, op});
-//             } else if (op->type == "pnnx.Output") {
-//                 this->output_operators_map_.insert({op->name, op});
-//     } else {
-//       // 以后的课中加layer的
-//       }
-//     }
+    for (const auto& op : this->operators_) {
+        if (op->type == "pnnx.Input") {
+            // 所有的输入节点
+            this->input_operators_map_.insert({op->name, op});
+            } else if (op->type == "pnnx.Output") {
+                this->output_operators_map_.insert({op->name, op});
+    } else {
+      // 以后的课中加layer的
+      }
+    }
 
-//     input_name_ = input_name;
-//     output_name_ = output_name;
-//     graph_state_ = GraphState::kComplete;
+    RuntimeGraphShape::InitOpeartorInputTensor(this->operators_);
+    RuntimeGraphShape::InitOperatorOutputTensor(this->graph_->ops, this->operators_);
 
-// }
+
+    this->input_name_ = input_name;
+    this->output_name_ = output_name;
+    this->graph_state_ = GraphState::kComplete;
+
+}
 
 
 }

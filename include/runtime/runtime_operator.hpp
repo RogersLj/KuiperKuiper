@@ -18,6 +18,8 @@ namespace kuiper_infer {
 class Layer;
 
 struct RuntimeOperator {
+
+    int32_t meet_time = 0; // 被前面算子填充输入的次数，当该次数等于输入节点时，即可加入执行队列
     
     ~RuntimeOperator() {
         for (const auto& param : this->params) {

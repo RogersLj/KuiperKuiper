@@ -69,8 +69,22 @@ public:
     const std::vector<std::shared_ptr<RuntimeOperator>> operators() const;
 
 
+// 前向推理 - 最终的推理
+
+    std::vector<std::shared_ptr<Tensor<float>>> Forward(const std::vector<std::shared_ptr<Tensor<float>>>& inputs, bool debug = false);
+
+
+
 //  所有的static函数只能通过类public函数访问
 private:
+    // 检查是否当前算子输入准备完成，可以加入执行队列
+    static bool CheckOperatorReady(const std::shared_ptr<RuntimeOperator>& op);
+
+    // 上一个节点的输出操作数搬运到下一个节点的输入操作数，一个输出可能会送到多个算子
+    static void SetOpInputData(const std::vector<std::shared_ptr<Tensor<float>>>& src, std::vector<std::vector<std::shared_ptr<Tensor<float>>>>& dst);
+
+    // 将输出传给下一个节点作为输入操作数
+    static void PassOutputToNext(const std::shared_ptr<RuntimeOperator>& cur_op, std::deque<std::shared_ptr<RuntimeOperator>>& operators_queue, std::vector<std::shared_ptr<Tensor<float>>> layer_output_data);
 
     // 根据节点的输入构建算子
     static void InitOperatorInputs(const std::vector<pnnx::Operand*>& inputs,

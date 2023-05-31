@@ -492,4 +492,143 @@ void RuntimeGraph::Build(const std::string& input_name, const std::string& outpu
 }
 
 
+std::vector<std::shared_ptr<Tensor<float>>> RuntimeGraph::Forward(const std::vector<std::shared_ptr<Tensor<float>>>& inputs, bool debug) {
+    if (this->graph_state_ < GraphState::kComplete) {
+        LOG(FATAL) << "Graph need to be builded first";
+    }
+
+    CHECK(this->graph_state_ == GraphState::kComplete) << "Graph status error, current state is " << int(this->graph_state_);
+
+    std::shared_ptr<RuntimeOperator> input_op; // 计算图的入口
+    if (input_operators_map_.find(input_name_) == input_operators_map_.end()) {
+        LOG(FATAL) << "input operator not found";
+    } else {
+        input_op = input_operators_map_.at(input_name_);
+    }
+
+    std::shared_ptr<RuntimeOperator> output_op;
+    if (output_operators_map_.find(output_name_) == output_operators_map_.end()) {
+        LOG(FATAL) << "output operator not found";
+    } else {
+        output_op = output_operators_map_.at(output_name_);
+    }
+
+    std::deque<std::shared_ptr<RuntimeOperator>> operators_queue;
+    operators_queue.push_back(input_op);
+    // 暂时假设计算图的输入只有一个
+    // 且输出也只有一个
+
+    if (debug) {
+        LOG(INFO) << "Batch size: " << inputs.size();
+        for (int i = 0; i < inputs.size(); ++i) {
+            LOG(INFO) << "Input Rows: " << inputs.at(i)->rows()
+                    << " Cols: " << inputs.at(i)->cols()
+                    << " Channels: " << inputs.at(i)->channels();
+                    }
+        LOG(INFO) << "Inference starting...";
+        LOG(INFO) << "--------------------------------------------------" << "\n";
+    }
+
+    while (operators_queue.size()) {
+        std::shared_ptr<RuntimeOperator> cur_op = operators_queue.front();
+        operators_queue.pop_front();
+
+        if (!cur_op || cur_op == output_op) {
+            if (debug) {
+                LOG(INFO) << "Inference end";
+            }
+            break;
+        }
+
+        if (cur_op == input_op) {
+            PassOutputToNext(cur_op, operators_queue, inputs); // 装上输入
+        } else {
+            std::string cur_op_name = cur_op->name;
+            if (!CheckOperatorReady(cur_op)) {
+                if (operators_queue.empty()) {
+                    LOG(FATAL) << "Operator " << cur_op_name << " is not ready";
+                    break;
+                } else {
+                    // 继续放回去，等待 ready
+                    operators_queue.push_back(cur_op);
+                }
+            }
+
+            // 当前算子可以执行
+
+            const std::vector<std::shared_ptr<RuntimeOperand>>& input_operands = cur_op->input_operands_seq;
+            // 所有输入的 operands 指针
+            
+            std::vector<std::shared_ptr<ftensor>> layer_input_datas; // 输入的数据
+
+            for (const auto& input_operand_data : input_operands) {
+                // 可能输入有多个操作数 - add，mul
+                for (const auto& input_data : input_operand_data->datas) {
+                    layer_input_datas.push_back(input_data);
+                } 
+            }
+
+            CHECK(!layer_input_datas.empty()) << cur_op->name <<  " Layer input data is empty";
+            CHECK(cur_op->output_operand != nullptr && !cur_op->output_operand->datas.empty()) << cur_op->name << " Layer output data is empty";
+
+            // 开始当前算子计算
+            cur_op->layer->Forward(layer_input_datas, cur_op->output_operand->datas);
+
+            PassOutputToNext(cur_op, operators_queue, cur_op->output_operand->datas);
+        }
+
+        for (const auto& op : this->operators_) {
+            op->meet_time = 0;
+        }
+
+        const auto& output_op_input_operand = output_op->input_operands.begin();
+        // 输出算子的输入就是最终计算图的推理结果
+
+        const auto& output_operand = output_op_input_operand->second;
+
+        return output_operand->datas;
+    } 
+
+}
+
+void RuntimeGraph::PassOutputToNext(const std::shared_ptr<RuntimeOperator>& cur_op, std::deque<std::shared_ptr<RuntimeOperator>>& operators_queue, std::vector<std::shared_ptr<Tensor<float>>> layer_output_datas) {
+    // 输出节点列表
+    const auto& next_ops = cur_op->output_operators;
+    
+    // 遍历所有的输出节点
+    for (const auto& next_op : next_ops) {
+        const auto& next_runtime_op = next_op.second; // 算子
+        const auto& next_op_input_operands = next_runtime_op->input_operands; // 所有输入节点
+
+        if (next_op_input_operands.find(cur_op->name) != next_op_input_operands.end()) {
+            // 确实是下一个节点的输入,取出分配好的空间装载数据
+            std::vector<std::shared_ptr<ftensor>>& next_input_datas = next_op_input_operands.at(cur_op->name)->datas;
+
+            // 装载一个batch的数据
+            for (uint32_t i = 0; i < next_input_datas.size(); ++i) {
+                next_input_datas.at(i) = layer_output_datas.at(i);
+            }
+
+            next_runtime_op->meet_time += 1;
+            if (std::find(operators_queue.begin(), operators_queue.end(), next_runtime_op) == operators_queue.end()) {
+                if (CheckOperatorReady(next_runtime_op)) {
+                    operators_queue.push_back(next_runtime_op);
+                }
+            }
+        }
+    }
+    
+}
+
+
+bool RuntimeGraph::CheckOperatorReady(const std::shared_ptr<RuntimeOperator>& op) {
+    CHECK(op != nullptr);
+    CHECK(op->meet_time <= op->input_operands.size());
+    if (op->meet_time == op->input_operands.size()) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 }

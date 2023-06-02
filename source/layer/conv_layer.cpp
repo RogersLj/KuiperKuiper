@@ -1,5 +1,4 @@
 #include "layer/conv_layer.hpp"
-#include "ops/conv_op.hpp"
 #include "data/tensor_util.hpp"
 #include "factory/layer_factory.hpp"
 #include <glog/logging.h>
@@ -7,32 +6,35 @@
 
 namespace kuiper_infer {
 
-ConvLayer::ConvLayer(const std::shared_ptr<Operator> &op) : Layer("ConvLayer") {
-    CHECK(op != nullptr && op->op_type_ == OpType::kOperatorConv);
-    ConvOp* conv_op = dynamic_cast<ConvOp*>(op.get());
+ConvLayer::ConvLayer(uint32_t in_channels, uint32_t out_channels, Shape kernel_size, Shape stride, Shape padding, uint32_t groups, bool has_bias) : ParamLayer("ConvLayer"),
+    has_bias_(has_bias),
+    groups_(groups),
+    kernel_size_(kernel_size),
+    stride_(stride),
+    padding_(padding) {
+    
+    if (groups != 1) {
+        in_channels = in_channels / groups;
+    }
 
-    CHECK(conv_op != nullptr) << "Conv op is empty!";
-    this->op_ = std::make_unique<ConvOp>(*conv_op);
+    this->InitWeightParam(out_channels, in_channels, kernel_size.first, kernel_size.second);
+
+    if (this->has_bias_) {
+        this->InitBiasParam(out_channels, 1, 1, 1);
+    }
 }    
 
 void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &inputs, std::vector<std::shared_ptr<Tensor<float>>> &outputs) {
-    CHECK(this->op_ != nullptr);
-    CHECK(this->op_->op_type_ == OpType::kOperatorConv);
-    CHECK(!inputs.empty());
-
-    auto stride = this->op_->get_stride();
-    auto padding = this->op_->get_padding();
 
     const uint32_t batch_size = inputs.size();
 
-    const uint32_t padding_h = padding.first;
-    const uint32_t padding_w = padding.second;
-    const uint32_t stride_h = stride.first;
-    const uint32_t stride_w = stride.second;
-    const uint32_t groups = this->op_->get_groups();
+    const uint32_t padding_h = this->padding_.first;
+    const uint32_t padding_w = this->padding_.second;
+    const uint32_t stride_h = this->stride_.first;
+    const uint32_t stride_w = this->stride_.second;
+    const uint32_t groups = this->groups_;
 
-    const std::vector<sftensor>& weights = this->op_->get_weights();
-    CHECK(!weights.empty());
+    LOG(INFO) << "参数设置-------------\npadding:" << padding_h << ", " << padding_w << "\nstride:" << stride_h << ", " << stride_w << "\ngroups:" << groups;
 
 
     for (uint32_t i = 0; i < batch_size; ++i) {
@@ -40,22 +42,30 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
 
         CHECK(input_data != nullptr);
 
-        if (padding_w != 0 || padding_h != 0)
+        if (padding_w != 0 || padding_h != 0) {
             input_data->Padding({padding_w, padding_w, padding_h, padding_h} ,0);
+            LOG(INFO) << "有padding----------------------\npadding之后形状\n" << input_data->shape().at(0) << ", " << input_data->shape().at(1) << ", " << input_data->shape().at(2) << std::endl;
+        }
 
         // batch里的一个输入
 
-        const uint32_t input_h = inputs.at(0)->rows();
-        const uint32_t input_w = inputs.at(0)->cols();
-        const uint32_t input_c = inputs.at(0)->channels();
+        const uint32_t input_h = input_data->shape().at(1);
+        const uint32_t input_w = input_data->shape().at(2);
+        const uint32_t input_c = input_data->shape().at(0);
         
-        const uint32_t output_c = weights.size(); // 卷积核个数
-        const uint32_t kernel_h = weights.at(0)->rows();
-        const uint32_t kernel_w = weights.at(0)->cols();
-        const uint32_t kernel_c = weights.at(0)->channels();
+        const uint32_t output_c = this->weights_.size(); // 卷积核个数
+        const uint32_t kernel_h = this->weights_.at(0)->rows();
+        const uint32_t kernel_w = this->weights_.at(0)->cols();
+        const uint32_t kernel_c = this->weights_.at(0)->channels();
         const uint32_t output_h = std::uint32_t(std::floor((input_h  - kernel_h) / stride_h)) + 1;
         const uint32_t output_w = std::uint32_t(std::floor((input_w  - kernel_w) / stride_w)) + 1;
 
+        LOG(INFO) << "-----------forward里计算得到的输出形状应该为：-=------\n" << output_h << ", " << output_w << std::endl;
+
+        LOG(INFO) << "------------test------------" << std::endl;
+        LOG(INFO) << "输入的形状，加上padding之后" << input_c << ", " << input_h << ", " << input_w << std::endl;
+        LOG(INFO) << "------------test------------" << std::endl;
+        
         if (groups != 1) {
             CHECK(input_c % groups == 0);
             CHECK(output_c % groups == 0);
@@ -73,6 +83,8 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
         // 当前batch的输出
         std::shared_ptr<ftensor> output_data = std::make_shared<ftensor>(output_c, output_h, output_w);
 
+        LOG(INFO) << "-----------forward里计算得到的输出形状应该为：-=------\n" << output_data->shape().at(0) << ", " << output_data->shape().at(1) << ", " << output_data->shape().at(2) << std::endl;
+
         uint32_t kernels_per_group = output_c / groups;
         for (uint32_t g = 0; g < groups; ++g) {
             // 拼接一个group的kernel和一个group的输入
@@ -84,7 +96,7 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
             for (uint32_t k = 0; k < kernels_per_group; ++k) {
                 // 展开一个group的kernel
                 // 拿到当前的kernel
-                const std::shared_ptr<Tensor<float>> &kernel = weights.at(k + kernels_per_group * g);
+                const std::shared_ptr<Tensor<float>> &kernel = this->weights_.at(k + kernels_per_group * g);
                 
                 // 按通道展开
                 for (uint32_t ic = 0; ic < kernel_c; ++ic) {
@@ -106,8 +118,9 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
                 const arma::fmat &input_channel = input_data->slice(g * kernel_c + ic);
                 // 取一个通道的输入
                 uint32_t cur_col = 0; // 遍历到的input_matrix的列
-                for (uint32_t irow = 0; irow < input_h - kernel_h + 1; irow += stride_h)
-                    for (uint32_t jcol = 0; jcol < input_w - kernel_w + 1; jcol += stride_w) {
+                // 要反着遍历
+                for (uint32_t jcol = 0; jcol < input_w - kernel_w + 1; jcol += stride_w)
+                    for (uint32_t irow = 0; irow < input_h - kernel_h + 1; irow += stride_h) {
                         // 当前channel应该放在input_matrix的cur_col的具体位置
                         float* input_matrix_c_colptr = input_matrix.colptr(cur_col) + ic * kernel_size;
                         cur_col += 1;
@@ -151,25 +164,89 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
                 arma::fmat output_biased = output;
                 output_biased.reshape(output_h, output_w);
 
-                if (this->op_->get_has_bias()) {
+                if (this->has_bias_) {
                     LOG(INFO) << "当前有bias：\n";
-                    std::vector<std::shared_ptr<Tensor<float>>> bias = this->op_->get_bias();
+                    std::vector<std::shared_ptr<Tensor<float>>> bias = this->bias_;
+
+                    LOG(INFO) << "-----------------bias-------------\n";
+                    bias.at(0)->Show();
+                    bias.at(1)->Show();
+                    bias.at(2)->Show();
                     
                     LOG(INFO) << "reshape后的输出：\n" << output;
-                    LOG(INFO) << "需要加到output上的bias：\n" << bias.at(k + kernels_per_group * g);
+                    LOG(INFO) << "需要加到output上的bias：\n" << bias.at(k + kernels_per_group * g)->index(0);
                     
                     output_biased += bias.at(k + kernels_per_group * g)->index(0);
                 } 
                 
                 output_slice = output_biased;
-
                 // output_data->slice(g * kernels_per_group + k) = std::move(output);
                 
             }
 
         }
         outputs.at(i) = std::move(output_data);
-
     }
 }
+
+
+void ConvLayer::CreateInstance(const std::shared_ptr<RuntimeOperator>& op, std::shared_ptr<Layer>& conv_layer) {
+    CHECK(op != nullptr) << "Convolution operation is nullptr";
+
+    const std::map<std::string, RuntimeParameter*>& params = op->params;
+
+    const auto& in_channels = dynamic_cast<RuntimeParameterInt*>(params.at("in_channels"));
+
+    const auto& out_channels = dynamic_cast<RuntimeParameterInt*>(params.at("out_channels"));
+
+    const auto& kernel_size = dynamic_cast<RuntimeParameterIntArray*>(params.at("kernel_size"));
+
+    const auto& stride = dynamic_cast<RuntimeParameterIntArray*>(params.at("stride"));
+
+    const auto& padding = dynamic_cast<RuntimeParameterIntArray*>(params.at("padding"));
+
+    const auto& has_bias = dynamic_cast<RuntimeParameterBool*>(params.at("bias"));
+
+    const auto& groups = dynamic_cast<RuntimeParameterInt*>(params.at("groups"));
+
+    const uint32_t dims = 2;
+    const uint32_t in_channels_ = in_channels->value;
+    const uint32_t out_channels_ = out_channels->value;
+    Shape kernel_size_ = {kernel_size->value.at(0), kernel_size->value.at(1)};
+    const Shape& stride_ = {stride->value.at(0), stride->value.at(1)};
+    const Shape& padding_ = {padding->value.at(0), padding->value.at(1)};
+    const bool& has_bias_ = has_bias->value;
+    const uint32_t& groups_ = groups->value;
+
+    // if (padding_.size() != dims) {
+    //     LOG(ERROR) << "Can not find the right padding parameter";
+    //     }
+
+    // if (stride_.size() != dims) {
+    //     LOG(ERROR) << "Can not find the right stride parameter";
+    //     }
+
+    // if (kernel_size_.size() != dims) {
+    //     LOG(ERROR) << "Can not find the right kernel size parameter";
+    //     }
+
+
+    conv_layer = std::make_shared<ConvLayer>(in_channels_, out_channels_, kernel_size_, stride_, padding_, groups_, has_bias_);
+
+    const std::map<std::string, std::shared_ptr<RuntimeAttribute>>& attrs = op->attrs;
+
+    const auto& bias = attrs.at("bias");
+    const std::vector<int>& sbias_shape = bias->shape;
+    const std::vector<float>& bias_values = bias->get<float>();
+    conv_layer->set_bias(bias_values);
+
+    const auto& weights = attrs.at("weight");
+    const std::vector<int>& wights_shape = weights->shape;
+    const std::vector<float>& weights_values = weights->get<float>();
+    conv_layer->set_weights(weights_values);
+}
+
+LayerRegisterWrapper kConvLayerCreateInstance("nn.Conv2d", ConvLayer::CreateInstance);
+
+
 }

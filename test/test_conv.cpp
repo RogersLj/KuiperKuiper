@@ -1,112 +1,39 @@
+#include "runtime/runtime_ir.hpp"
 #include <gtest/gtest.h>
-#include <glog/logging.h>
-#include "ops/op.hpp"
-#include "layer/conv_layer.hpp"
-#include "data/tensor_util.hpp"
+#include <gtest/gtest.h>
 
-// 单卷积单通道
-TEST(test_layer, conv1) {
+TEST(test_conv, forward1) {
     using namespace kuiper_infer;
-    LOG(INFO) << "My convolution test!";
+    const std::string &param_path = "../tmp/conv_layer.pnnx.param";
+    const std::string &weight_path = "../tmp/conv_layer.pnnx.bin";
+    RuntimeGraph graph(param_path, weight_path);
+    graph.Build("pnnx_input_0", "pnnx_output_0");
+    const auto &operators = graph.operators();
+    LOG(INFO) << "operator size: " << operators.size();
+    uint32_t batch_size = 1;
     
-    Shape stride = {1, 1};
-    Shape padding = {0, 0};
-    
-    ConvOp *conv_op = new ConvOp(stride, padding, false, 1);
-    // 单个卷积核的情况
-    std::vector<float> values;
-    for (int i = 0; i < 3; ++i) {
-        values.push_back(float(i + 1));
-        values.push_back(float(i + 1));
-        values.push_back(float(i + 1));
-    }
-    std::shared_ptr<ftensor> weight1 = std::make_shared<ftensor>(1, 3, 3);
-    weight1->Fill(values);
-    LOG(INFO) << "weight:";
-    weight1->Show();
-    // 设置权重
-    std::vector<sftensor> weights;
-    weights.push_back(weight1);
-    conv_op->set_weights(weights);
-    std::shared_ptr<Operator> op = std::shared_ptr<ConvOp>(conv_op);
-
-    std::vector<std::shared_ptr<ftensor >> inputs;
     arma::fmat input_data = {{1, 2, 3, 4}, 
-                            {5, 6, 7, 8}, 
-                            {9, 10, 11, 12}, 
-                            {13, 14, 15, 16}};
-    std::shared_ptr<ftensor> input = std::make_shared<ftensor>(1, 4, 4);
-    input->slice(0) = input_data;
-    LOG(INFO) << "input:";
-    input->Show();
-    // 权重数据和输入数据准备完毕
-    inputs.push_back(input);
-    ConvLayer layer(op);
-    std::vector<std::shared_ptr<ftensor >> outputs(1);
+                                {5, 6, 7, 8}, 
+                                {9, 10, 11, 12}, 
+                                {13, 14, 15, 16}};
 
-    layer.Forward(inputs, outputs);
-    LOG(INFO) << "result: ";
-    for (int i = 0; i < outputs.size(); ++i) {
-        outputs.at(i)->Show();
-    }
-}
-
-// 多卷积多通道
-TEST(test_layer, conv2) {
-    using namespace kuiper_infer;
-    
-    LOG(INFO) << "My convolution test!";
-
-    Shape stride = {1, 1};
-    Shape padding = {0, 0};
-    
-    ConvOp *conv_op = new ConvOp(stride, padding, false, 1);
-    // 单个卷积核的情况
-    std::vector<float> values;
-
-    arma::fmat weight_data = {{1 ,1, 1},
-                            {2 ,2, 2},
-                            {3 ,3, 3}};
-    // 初始化三个卷积核
-    std::shared_ptr<ftensor> weight1 = std::make_shared<ftensor>(3, 3, 3);
-    weight1->slice(0) = weight_data;
-    weight1->slice(1) = weight_data;
-    weight1->slice(2) = weight_data;
-
-    std::shared_ptr<ftensor> weight2 = TensorClone(weight1);
-    std::shared_ptr<ftensor> weight3 = TensorClone(weight1);
-
-    LOG(INFO) << "weight:";
-    weight1->Show();
-    // 设置权重
-    std::vector<sftensor> weights;
-    weights.push_back(weight1);
-    weights.push_back(weight2);
-    weights.push_back(weight3);
-
-    conv_op->set_weights(weights);
-    std::shared_ptr<Operator> op = std::shared_ptr<ConvOp>(conv_op);
-
-    std::vector<std::shared_ptr<ftensor >> inputs;
-    arma::fmat inp = {{1, 2, 3, 4}, 
-                    {5, 6, 7, 8}, 
-                    {9, 10, 11, 12}, 
-                    {13, 14, 15, 16}};
     std::shared_ptr<ftensor> input = std::make_shared<ftensor>(3, 4, 4);
-    input->slice(0) = inp;
-    input->slice(1) = inp;
-    input->slice(2) = inp;
 
-    LOG(INFO) << "input:";
+    for (uint32_t i = 0; i < 3; i ++) {
+        input->slice(i) = input_data;
+    }
+  
     input->Show();
-    // 权重数据和输入数据准备完毕
-    inputs.push_back(input);
-    ConvLayer layer(op);
-    std::vector<std::shared_ptr<ftensor >> outputs(1);
+  
+    std::vector<sftensor> inputs(batch_size);
+    for (uint32_t i = 0; i < batch_size; ++i) {
+        inputs.at(i) = input;
+    }
+    const std::vector<sftensor> &outputs = graph.Forward(inputs, true);
 
-    layer.Forward(inputs, outputs);
-    LOG(INFO) << "result: ";
-    for (int i = 0; i < outputs.size(); ++i) {
+    LOG(INFO) << "----------------------输出的形状：---------\n" << outputs.size() << ", " << outputs.at(0)->shape().at(0) << ", " << outputs.at(0)->shape().at(1) << ", " << outputs.at(0)->shape().at(2);
+
+    for (uint32_t i = 0; i < batch_size; ++i) {
         outputs.at(i)->Show();
     }
 }

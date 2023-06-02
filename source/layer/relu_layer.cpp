@@ -1,63 +1,41 @@
 #include <glog/logging.h>
-#include "ops/relu_op.hpp"
 #include "layer/relu_layer.hpp"
 #include "data/tensor_util.hpp"
 #include "factory/layer_factory.hpp"
+#include "runtime/runtime_operator.hpp"
 
 namespace kuiper_infer {
-    
-ReLULayer::ReLULayer(const std::shared_ptr<Operator> &op) : Layer("ReLU") {
-    CHECK(op->op_type_ == OpType::kOperatorReLU) << 
-        "Operator " << int(op->op_type_)  << " is not " << "ReLU!";
-    
-    // dynamic_cast关键字用于执行运行时类型检查，并安全地将基类的指针或引用转换为派生类的指针或引用。
-    // 将指针 op 强制转换为类型为 ReluOperator * 的指针
-    // 在需要将基类的指针或引用转换为派生类的指针或引用时，使用 dynamic_cast。它通过执行检查确保运行时转换是安全的。如果转换不可能，则 dynamic_cast 返回空指针。
-    ReLUOperator* relu_op = dynamic_cast<ReLUOperator*>(op.get());
-
-    CHECK(relu_op != nullptr) << "ReLU operator is empty!";
-
-    // 创建了一个ReLUOperator对象的指针
-    // 同时使用构造函数进行初始化
-    // 函数原型 explicit ReLUOperator(float threshold);
-    this->op_ = std::make_unique<ReLUOperator>(relu_op->get_threshold());
-}
-
 // 实际的算子计算过程
 void ReLULayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &inputs, std::vector<std::shared_ptr<Tensor<float>>> &outputs) {
-    CHECK(this->op_ != nullptr);
-    CHECK(this->op_->op_type_ == OpType::kOperatorReLU);
-    CHECK(!inputs.empty());
+
+    if (inputs.empty()) {
+        LOG(ERROR) << "inputs is empty!";
+    }
+
+    if (inputs.size() != outputs.size()) {
+        LOG(ERROR) << "the input size is not equal to the output size!";
+    }
 
     const uint32_t batch_size = inputs.size();
 
     for (uint32_t i = 0; i < batch_size; ++i) {
         CHECK(!inputs.at(i)->empty());
         const std::shared_ptr<Tensor<float>> &input_data = inputs.at(i);
-        std::shared_ptr<Tensor<float>> output_data = TensorClone(input_data);
+        std::shared_ptr<Tensor<float>> output_data = outputs.at(i);
 
-        output_data->data().transform([&](float value) {
-            float threshold = this->op_->get_threshold();
-
-            if (value >= threshold) {
-                return value;
-            } else return 0.f;
-        });
-
-        outputs.push_back(output_data);
+        output_data->set_data(input_data->data());
+        output_data->data().transform([&](float v) { return v > 0.f ? v : 0.f; });
     }
-
 }
 
-std::shared_ptr<Layer> ReLULayer::CreateInstance(const std::shared_ptr<Operator> &op) {
-    CHECK(op->op_type_ == OpType::kOperatorReLU);
-    std::shared_ptr<Layer> relu_layer = std::make_shared<ReLULayer>(op);
-    return relu_layer;
+void ReLULayer::CreateInstance(const std::shared_ptr<RuntimeOperator> &op, std::shared_ptr<Layer>& relu_layer) {
+    CHECK(op != nullptr) << "Operator is nullptr!";
+    relu_layer = std::make_shared<ReLULayer>();
 }
 
 
 // 定已完成之后直接调用LayerRegistererWrapper类初始化实例kReLULayer
 // 初始化时会直接在注册表注册
-LayerRegisterWrapper kReLULayer(OpType::kOperatorReLU, ReLULayer::CreateInstance);
+LayerRegisterWrapper kReLULayerCreateInstance("nn.ReLU", ReLULayer::CreateInstance);
 
 }

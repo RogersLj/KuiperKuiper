@@ -127,3 +127,53 @@ Reshape的方式是列优先的，这是因为负责管理数据的armadillo::cu
 这个计算图就是静态图
 
 init 完成对计算图ir的转换，build完成数据空间的分配
+
+但是到现在都是空的,执行的算子是layer,但是此时还没有把runtimeOperator和layer映射起来
+
+
+## tenth
+
+最后需要完成前向推断,需要为每个RuntimeOperator创建对应的layer
+但是之前创建layer是靠的Operator类,而经过包装后,创建layer时用到的Operator类的属性,现在可以直接从RuntimeOperator类里读取
+因此需要对layer创建时的函数进行整体的修改,采用直接使用RuntimeOperator创建
+
+同时对于参数和权重信息被封装在param和attrs里
+现在也需要将其内容放到layer里
+
+先从forward函数里看，如果对原有的代码进行重构
+因为我们需要在forward函数里进行layer的计算
+
+---
+
+很重要的一点
+因为之前op存储属性,layer进行计算
+对应到现在,layer已经被封装进RuntimeOperator里
+而属性信息,即参数和权重也被存放在RuntimeOperator的params和attrs里
+因此,我们在初始化layer的时候,其实不需要另外使用一个op
+
+对之前的代码进行改进,就是要通过RuntimeOperator初始化layer
+同时将RuntimeOperator的信息直接传给layer层
+当在图build函数的时候,在创建layer之前,已经初始化完所有的operators,在init函数里,
+同时param和attrs信息也已经存入operator里,
+因此在创建layer的时候,要用op里的参数和权重信息初始化layer
+之前的这部分信息由op存储,而现在需要直接存储在layer里
+因此代码需要修改的一部分是给layer添加一些属性信息(和之前op和layer,属性和计算分开有些不一样了)
+
+### 重点:重写Layer类
+- 对于所有的参数来说,一般分为​可训练参数和超参数,在常见的视觉网络里.例如resnet,yolov5中,除了卷积层和全连接层,其他都是超参数
+- 而我们在推理阶段所用于计算的,一般都是训练得到的参数部分，卷积和全连接层的权重参数和偏置
+- 所以基于基类layer,定义一个paramlayer,定义专门用于weight和bias的函数,方便继承类使用
+
+
+之后在计算的时候,forward时其实就是调用RuntimeOperator里面的layer的forward函数进行计算
+
+主要的改动就是将之前每个算子用operator类创建layer的函数改成
+通过runtimeoperator类创建
+
+--- 
+
+修改后代码的运行流程是这样的：
+1. 当整个框架编译完成的时候，就完成了算子的注册，注册表为算子的名字和算子layer的创建函数
+2. 当前向推理时，会找到当前算子对应的layer创建函数，并传入当前RuntimeOperator，初始化layer信息，然后将初始化好的layer放进RuntimeOperator里。初始化的信息包括具体的参数和权重。这部分已经在RuntimeOperator类的params和attrs里。
+3. 本来layer的构造函数由原本的Operator类进行构造。现在没有了中间的Operator类，因此首先需要修改我们layer的构造函数，构造参数会由RuntimeOperator的params和attrs信息进行构造。如果该层有weghts和bias，则继承与ParamLayer类，里面的weights和bias用于存储数据。如果是没有weights和bias的layer，则直接在继承类里保存相应信息。
+4. 最后每个算子的creator函数，就是CreateInstance函数，通过传入的RuntimeOperator类返回当前初始化好的layer实例。该函数就是被放入注册表，在推断时查找的创建layer的函数。

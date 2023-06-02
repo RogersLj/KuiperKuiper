@@ -8,6 +8,16 @@
 
 namespace kuiper_infer {
 
+// 用RuntimeOperator初始化layer
+std::shared_ptr<Layer> RuntimeGraph::CreateLayer(const std::shared_ptr<RuntimeOperator>& op) {
+    LOG_IF(FATAL, !op) << "op is nullptr";
+
+    // 注意这里的createlayer和之前的函数实现功能其实是一样的,只不过传入的参数从operator变成了封装后的runtimeoperator
+    const auto& layer = LayerRegister::CreateLayer(op);
+    LOG_IF(FATAL, !layer) << "Layer init failed!";
+    return layer;
+}
+
 void RuntimeGraphShape::InitOpeartorInputTensor(const std:: vector<std::shared_ptr<RuntimeOperator>>& operators) {
     if (operators.empty()) {
         LOG(ERROR) << "operators for init is empty";
@@ -470,17 +480,20 @@ void RuntimeGraph::Build(const std::string& input_name, const std::string& outpu
     this->input_operators_map_.clear();
     this->output_operators_map_.clear();
 
+    // 除了输入输出节点,其他RuntimeOperator都对应框架定义的layer
     for (const auto& op : this->operators_) {
         if (op->type == "pnnx.Input") {
-            // 所有的输入节点
             this->input_operators_map_.insert({op->name, op});
             } else if (op->type == "pnnx.Output") {
                 this->output_operators_map_.insert({op->name, op});
     } else {
-      // 以后的课中加layer的
+        std::shared_ptr<Layer> layer = RuntimeGraph::CreateLayer(op);
+        CHECK(layer != nullptr) << "Create layer failed!";
+        if (layer) op->layer = layer;
       }
     }
 
+    // 分配数据空间
     RuntimeGraphShape::InitOpeartorInputTensor(this->operators_);
     RuntimeGraphShape::InitOperatorOutputTensor(this->graph_->ops, this->operators_);
 
@@ -517,7 +530,8 @@ std::vector<std::shared_ptr<Tensor<float>>> RuntimeGraph::Forward(const std::vec
     operators_queue.push_back(input_op);
     // 暂时假设计算图的输入只有一个
     // 且输出也只有一个
-
+    std::map<std::string, double> run_duration_infos;  /// 运行时间统计
+    
     if (debug) {
         LOG(INFO) << "Batch size: " << inputs.size();
         for (int i = 0; i < inputs.size(); ++i) {
@@ -543,6 +557,7 @@ std::vector<std::shared_ptr<Tensor<float>>> RuntimeGraph::Forward(const std::vec
         if (cur_op == input_op) {
             PassOutputToNext(cur_op, operators_queue, inputs); // 装上输入
         } else {
+            // 其他的算子
             std::string cur_op_name = cur_op->name;
             if (!CheckOperatorReady(cur_op)) {
                 if (operators_queue.empty()) {
@@ -557,10 +572,12 @@ std::vector<std::shared_ptr<Tensor<float>>> RuntimeGraph::Forward(const std::vec
             // 当前算子可以执行
 
             const std::vector<std::shared_ptr<RuntimeOperand>>& input_operands = cur_op->input_operands_seq;
-            // 所有输入的 operands 指针
+            // 所有用于该算子计算的输入的 operands 指针
             
             std::vector<std::shared_ptr<ftensor>> layer_input_datas; // 输入的数据
 
+            // 多个operands时数据的排布是
+            // (in1_1, in1_2, in1_3, in2_1, in2_2, in2_3, in3_1, in3_2, in3_3)
             for (const auto& input_operand_data : input_operands) {
                 // 可能输入有多个操作数 - add，mul
                 for (const auto& input_data : input_operand_data->datas) {
@@ -568,27 +585,74 @@ std::vector<std::shared_ptr<Tensor<float>>> RuntimeGraph::Forward(const std::vec
                 } 
             }
 
+            // 输出只有一个，因此可以直接调用output_operand->datas
             CHECK(!layer_input_datas.empty()) << cur_op->name <<  " Layer input data is empty";
             CHECK(cur_op->output_operand != nullptr && !cur_op->output_operand->datas.empty()) << cur_op->name << " Layer output data is empty";
 
+            // 计算图的inference开始时间
+            const auto& start = std::chrono::steady_clock::now();
+
+            // 每个layer的运算结果在对应op->output_operand->datas里
             // 开始当前算子计算
+            // 在计算图的forward里并没有根据op初始化layer
+            // 实际上layer的创建实在将op ir从pnnx转换为runtimeop时就初始化的op对应的layer
             cur_op->layer->Forward(layer_input_datas, cur_op->output_operand->datas);
 
+            if (debug) {
+                std::replace_if(cur_op_name.begin(), cur_op_name.end(),
+                    [](char c) { return c == '.'; }, '_');
+                    const double duration = std::chrono::duration_cast<std::chrono::duration<double>> (std::chrono::steady_clock::now() - start).count();
+                    
+                    if (run_duration_infos.find(cur_op->type) == run_duration_infos.end()) {
+                    run_duration_infos.insert({cur_op->type, duration});
+                    } else { 
+                        run_duration_infos.at(cur_op->type) += duration;
+                    }
+                }
+
+            const auto copy_start = std::chrono::steady_clock::now();
+            // 将当前layer的计算输出current_op->output_operands->datas赋值到后继节点的输入中
+
             PassOutputToNext(cur_op, operators_queue, cur_op->output_operand->datas);
-        }
+
+            const double duration =
+                    std::chrono::duration_cast<std::chrono::duration<double>>(
+                        std::chrono::steady_clock::now() - copy_start)
+                        .count();
+                if (debug) {
+                    if (run_duration_infos.find("Copy") == run_duration_infos.end()) {
+                    run_duration_infos.insert({"Copy", duration});
+                    } else {
+                    run_duration_infos.at("Copy") += duration;
+                    }
+                }
+    } 
+}
 
         for (const auto& op : this->operators_) {
             op->meet_time = 0;
         }
+
+        CHECK(output_op->input_operands.size() == 1);
+        // 最后一个输出节点，输入就是最终的结果
 
         const auto& output_op_input_operand = output_op->input_operands.begin();
         // 输出算子的输入就是最终计算图的推理结果
 
         const auto& output_operand = output_op_input_operand->second;
 
-        return output_operand->datas;
-    } 
+        if (debug) {
+            LOG(INFO) << "Model Running Information, Time Cost:";
+            double duration_all = 0.;
+            for (const auto& run_info : run_duration_infos) {
+            LOG(INFO) << "OP type: " << run_info.first
+                        << " duration: " << run_info.second << " s";
+            duration_all += run_info.second;
+            }
+            LOG(INFO) << "All time cost: " << duration_all << " s";
+        }
 
+        return output_operand->datas;
 }
 
 void RuntimeGraph::PassOutputToNext(const std::shared_ptr<RuntimeOperator>& cur_op, std::deque<std::shared_ptr<RuntimeOperator>>& operators_queue, std::vector<std::shared_ptr<Tensor<float>>> layer_output_datas) {

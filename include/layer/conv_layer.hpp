@@ -1,22 +1,26 @@
 #ifndef KUIPER_INFER_LAYER_CONV_LAYER_HPP
 #define KUIPER_INFER_LAYER_CONV_LAYER_HPP
 
-#include "layer.hpp"
-#include "ops/conv_op.hpp"
+#include "param_layer.hpp"
+#include "runtime/runtime_ir.hpp"
 
 namespace kuiper_infer {
 
-class ConvLayer : public Layer {
+class ConvLayer : public ParamLayer {
 public:
-    ConvLayer(const std::shared_ptr<Operator> &op);
+    explicit ConvLayer(uint32_t in_channels, uint32_t out_channels, Shape kernel_size, Shape stride, Shape padding, uint32_t groups, bool has_bias);
+    
     void Forward(const std::vector<std::shared_ptr<Tensor<float>>> &inputs, std::vector<std::shared_ptr<Tensor<float>>> &outputs) override;
 
-    static std::shared_ptr<Layer> CreateInstance(const std::shared_ptr<Operator> &op);
+    static void CreateInstance(const std::shared_ptr<RuntimeOperator> &op, std::shared_ptr<Layer>& conv_layer);
 
 private:
 
-    std::unique_ptr<ConvOp> op_;
-
+    bool has_bias_;
+    uint32_t groups_ = 1;
+    Shape kernel_size_;
+    Shape stride_;
+    Shape padding_;
 
 };
   

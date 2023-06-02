@@ -77,6 +77,10 @@ public:
 
 //  所有的static函数只能通过类public函数访问
 private:
+    // 转化pnnx op时,同时为每个RuntimeOperator初始化layer
+    // attrs需要装载到layer里
+    static std::shared_ptr<Layer> CreateLayer(const std::shared_ptr<RuntimeOperator>& op);
+
     // 检查是否当前算子输入准备完成，可以加入执行队列
     static bool CheckOperatorReady(const std::shared_ptr<RuntimeOperator>& op);
 

@@ -2,10 +2,10 @@
 // #include <gtest/gtest.h>
 // #include <gtest/gtest.h>
 
-// TEST(test_conv, conv_layer) {
+// TEST(test_relu, relu_layer) {
 //     using namespace kuiper_infer;
-//     const std::string &param_path = "../tmp/conv_layer.pnnx.param";
-//     const std::string &weight_path = "../tmp/conv_layer.pnnx.bin";
+//     const std::string &param_path = "../tmp/pytorch/conv_relu_layer.pnnx.param";
+//     const std::string &weight_path = "../tmp/pytorch/conv_relu_layer.pnnx.bin";
 //     RuntimeGraph graph(param_path, weight_path);
 //     graph.Build("pnnx_input_0", "pnnx_output_0");
 //     const auto &operators = graph.operators();

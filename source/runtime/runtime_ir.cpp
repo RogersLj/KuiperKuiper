@@ -598,6 +598,8 @@ std::vector<std::shared_ptr<Tensor<float>>> RuntimeGraph::Forward(const std::vec
             // 实际上layer的创建实在将op ir从pnnx转换为runtimeop时就初始化的op对应的layer
             cur_op->layer->Forward(layer_input_datas, cur_op->output_operand->datas);
 
+            LOG(INFO) << "算子的执行顺序------------------执行算子：\n" << cur_op->type << "\n";
+
             if (debug) {
                 std::replace_if(cur_op_name.begin(), cur_op_name.end(),
                     [](char c) { return c == '.'; }, '_');

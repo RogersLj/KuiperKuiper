@@ -1,0 +1,71 @@
+:‰
+0pnnx_input_0"
+pnnx.Input
+Â
+0
+
+conv1.bias
+conv1.weight1conv1"	nn.Conv2d*
+bias*
+dilation@@*
+
+groups*
+in_channels*
+kernel_size@@*
+out_channels*
+padding@@*
+padding_mode"zeros*
+stride@@
+Â
+1
+
+conv2.bias
+conv2.weight2conv2"	nn.Conv2d*
+bias*
+dilation@@*
+
+groups*
+in_channels*
+kernel_size@@*
+out_channels*
+padding@@*
+padding_mode"zeros*
+stride@@
+
+23relu"nn.ReLU
+
+3pnnx_output_0"pnnx.Output*
+B
+conv1.biasJş¬@¢0*½
+Bconv1.weightJ¢°ê¯Y0-˜-{.‚0©pª{1z1å°Ö,¬Òªƒ °G',.å&m®D±)ò#t-Z-`±s,Õ.Ğ+¤°‡%®±N&o«+¢G+i1Ä-x//1)m0+!0®æ¥-É1†0ÿ1±É-¬(¯ëªM°g±ö¬M°/&%ì11­'¡0¡&"/V.²Ö­–-_«Ä1æ/*ˆ.4¬0*
+B
+conv2.biasJŸy¡y *½
+Bconv2.weightJ¢$¥J¯o*C¢¯ˆ±F&,+°=-±/®/B-#.R1ª©±Ú0Î©è)¼¤&)h"ë¤¡°´¨©»Ô0&™Î"€//­Ë0/-ê0d°ç/÷°°Ã°÷$Û¨»±},µ0i1İ “-•¯µ/e¥²®÷1Æ%2°"m± 0N¬pª¯W±­±÷ J#ß®õ)U® V®Ö/U-¼0]* °j
+0
+
+
+
+
+
+j
+1
+
+
+
+
+
+j
+2
+
+
+
+
+
+j
+3
+
+
+
+
+
+

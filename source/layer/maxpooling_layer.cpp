@@ -1,38 +1,23 @@
 #include <glog/logging.h>
-#include "ops/maxpooling_op.hpp"
 #include "layer/maxpooling_layer.hpp"
 #include "data/tensor_util.hpp"
 #include "factory/layer_factory.hpp"
 
 namespace kuiper_infer {
     
-MaxPoolingLayer::MaxPoolingLayer(const std::shared_ptr<Operator> &op) : Layer("MaxPoolingLayer") {
-    CHECK(op->op_type_ == OpType::kOperatorMaxPooling)
-        << "Operator " << int(op->op_type_) << " is not MaxPoolingOp!";
-
-    MaxPoolingOp* maxpooling_op = dynamic_cast<MaxPoolingOp*>(op.get());
-
-    CHECK(maxpooling_op != nullptr) << "MaxPooling op is empty!";
-
-    this->op_ = std::make_unique<MaxPoolingOp>(*maxpooling_op);
+MaxPoolingLayer::MaxPoolingLayer(Shape kernel_size, Shape stride, Shape padding) : Layer("MaxPoolingLayer"), kernel_size_(kernel_size), stride_(stride), padding_(padding) {
+    
 }
 
 void MaxPoolingLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &inputs, std::vector<std::shared_ptr<Tensor<float>>> &outputs) {
-    CHECK(this->op_ != nullptr);
-    CHECK(this->op_->op_type_ == OpType::kOperatorMaxPooling);
-    CHECK(!inputs.empty());
+    CHECK(!inputs.empty()) << "inputs is empty";
 
-    auto kernel_size = this->op_->get_kernel_size();
-    auto stride = this->op_->get_stride();
-    auto padding = this->op_->get_padding();
-
-
-    const uint32_t padding_h = padding.first;
-    const uint32_t padding_w = padding.second;
-    const uint32_t kernel_h = kernel_size.first;
-    const uint32_t kernel_w = kernel_size.second;
-    const uint32_t stride_h = stride.first;
-    const uint32_t stride_w = stride.second;
+    const uint32_t padding_h = this->padding_.first;
+    const uint32_t padding_w = this->padding_.second;
+    const uint32_t kernel_h = this->kernel_size_.first;
+    const uint32_t kernel_w = this->kernel_size_.second;
+    const uint32_t stride_h = this->stride_.first;
+    const uint32_t stride_w = this->stride_.second;
 
     const uint32_t batch_size = inputs.size();
 
@@ -43,7 +28,10 @@ void MaxPoolingLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> 
         //(padding_left,padding_right,padding_top,padding_bottom)
         // padding_h - padding_top,padding_bottom
         // padding_w - padding_left,padding_right
-        input_data->Padding({padding_w, padding_w, padding_h, padding_h} ,std::numeric_limits<float>::lowest());
+        
+        if (padding_w != 0 || padding_h != 0) {
+            input_data->Padding({padding_w, padding_w, padding_h, padding_h} ,std::numeric_limits<float>::lowest());
+        }
 
         const uint32_t input_h = input_data->rows();
         const uint32_t input_w = input_data->cols();
@@ -68,17 +56,33 @@ void MaxPoolingLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> 
                 }
             }
         }
-        outputs.push_back(output);
+        outputs.at(i) = output;
     }
 
 }
 
-std::shared_ptr<Layer> MaxPoolingLayer::CreateInstance(const std::shared_ptr<Operator> &op) {
-    CHECK(op->op_type_ == OpType::kOperatorMaxPooling);
-    return std::make_shared<MaxPoolingLayer>(op);
+void MaxPoolingLayer::CreateInstance(const std::shared_ptr<RuntimeOperator> &op, std::shared_ptr<Layer>& maxpooling_layer) {
+    CHECK(op != nullptr) << "op is nullptr";
+
+    const std::map<std::string, RuntimeParameter*>& params = op->params;
+
+    const auto& kernel_size = dynamic_cast<RuntimeParameterIntArray*>(params.at("kernel_size"));
+    const auto& stride = dynamic_cast<RuntimeParameterIntArray*>(params.at("stride"));
+    const auto& padding = dynamic_cast<RuntimeParameterIntArray*>(params.at("padding"));
+
+    const auto& kernel_size_v = kernel_size->value;
+    const auto& stride_v = stride->value;
+    const auto& padding_v = padding->value;
+
+    Shape k = {kernel_size_v.at(0), kernel_size_v.at(1)};
+    Shape s = {stride_v.at(0), stride_v.at(1)};
+    Shape p = {padding_v.at(0), padding_v.at(1)};
+
+    maxpooling_layer = std::make_shared<MaxPoolingLayer>(k, s, p);
+
 }
 
 // 注册池化层
-LayerRegisterWrapper kMaxPoolingLayer(OpType::kOperatorMaxPooling, MaxPoolingLayer::CreateInstance);
+LayerRegisterWrapper kMaxPoolingLayer("nn.MaxPool2d", MaxPoolingLayer::CreateInstance);
 
 }

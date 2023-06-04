@@ -4,7 +4,7 @@
 #include <iomanip>
 #include <queue>
 #include <utility>
-#include "factory/layer_factory.hpp"
+#include "layer/layer_factory.hpp"
 
 namespace kuiper_infer {
 

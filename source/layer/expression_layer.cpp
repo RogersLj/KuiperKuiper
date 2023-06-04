@@ -1,5 +1,5 @@
 #include <glog/logging.h>
-#include "layer/expression_layer.hpp"
+#include "./expression_layer.hpp"
 #include <stack>
 #include "data/tensor.hpp"
 #include "data/tensor_util.hpp"
@@ -7,7 +7,7 @@
 namespace kuiper_infer {
     
 ExpressionLayer::ExpressionLayer(const std::string& expression) : Layer("ExpressionLayer"), parser_(std::make_shared<ExpressionParser>(expression)) {
-    LOG(INFO) << "++++++++++表达式++++++++++++++++" << expression;    
+    // LOG(INFO) << "++++++++++表达式++++++++++++++++" << expression;    
 }
 
 // 对于expression layer，可能设计多个操作，例如add，mul

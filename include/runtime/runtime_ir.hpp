@@ -6,7 +6,7 @@
 #include <queue>
 
 #include "ir.h"
-#include "factory/layer_factory.hpp"
+#include "layer/layer_factory.hpp"
 #include "runtime/runtime_operand.hpp"
 #include "runtime_operator.hpp"
 

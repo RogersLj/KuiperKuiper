@@ -1,6 +1,6 @@
-#include "layer/conv_layer.hpp"
+#include "./conv_layer.hpp"
 #include "data/tensor_util.hpp"
-#include "factory/layer_factory.hpp"
+#include "layer/layer_factory.hpp"
 #include <glog/logging.h>
 
 
@@ -34,7 +34,7 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
     const uint32_t stride_w = this->stride_.second;
     const uint32_t groups = this->groups_;
 
-    LOG(INFO) << "参数设置-------------\npadding:" << padding_h << ", " << padding_w << "\nstride:" << stride_h << ", " << stride_w << "\ngroups:" << groups;
+    // LOG(INFO) << "参数设置-------------\npadding:" << padding_h << ", " << padding_w << "\nstride:" << stride_h << ", " << stride_w << "\ngroups:" << groups;
 
 
     for (uint32_t i = 0; i < batch_size; ++i) {
@@ -44,7 +44,7 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
 
         if (padding_w != 0 || padding_h != 0) {
             input_data->Padding({padding_w, padding_w, padding_h, padding_h} ,0);
-            LOG(INFO) << "有padding----------------------\npadding之后形状\n" << input_data->shape().at(0) << ", " << input_data->shape().at(1) << ", " << input_data->shape().at(2) << std::endl;
+            // LOG(INFO) << "有padding----------------------\npadding之后形状\n" << input_data->shape().at(0) << ", " << input_data->shape().at(1) << ", " << input_data->shape().at(2) << std::endl;
         }
 
         // batch里的一个输入
@@ -60,11 +60,11 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
         const uint32_t output_h = std::uint32_t(std::floor((input_h  - kernel_h) / stride_h)) + 1;
         const uint32_t output_w = std::uint32_t(std::floor((input_w  - kernel_w) / stride_w)) + 1;
 
-        LOG(INFO) << "-----------forward里计算得到的输出形状应该为：-=------\n" << output_h << ", " << output_w << std::endl;
+        // LOG(INFO) << "-----------forward里计算得到的输出形状应该为：-=------\n" << output_h << ", " << output_w << std::endl;
 
-        LOG(INFO) << "------------test------------" << std::endl;
-        LOG(INFO) << "输入的形状，加上padding之后" << input_c << ", " << input_h << ", " << input_w << std::endl;
-        LOG(INFO) << "------------test------------" << std::endl;
+        // LOG(INFO) << "------------test------------" << std::endl;
+        // LOG(INFO) << "输入的形状，加上padding之后" << input_c << ", " << input_h << ", " << input_w << std::endl;
+        // LOG(INFO) << "------------test------------" << std::endl;
         
         if (groups != 1) {
             CHECK(input_c % groups == 0);
@@ -83,7 +83,7 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
         // 当前batch的输出
         std::shared_ptr<ftensor> output_data = std::make_shared<ftensor>(output_c, output_h, output_w);
 
-        LOG(INFO) << "-----------forward里计算得到的输出形状应该为：-=------\n" << output_data->shape().at(0) << ", " << output_data->shape().at(1) << ", " << output_data->shape().at(2) << std::endl;
+        // LOG(INFO) << "-----------forward里计算得到的输出形状应该为：-=------\n" << output_data->shape().at(0) << ", " << output_data->shape().at(1) << ", " << output_data->shape().at(2) << std::endl;
 
         uint32_t kernels_per_group = output_c / groups;
         for (uint32_t g = 0; g < groups; ++g) {
@@ -137,7 +137,7 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
             }
 
             // 还是在一个group里
-            LOG(INFO) << "input展开后: " << "\n" << input_matrix;
+            // LOG(INFO) << "input展开后: " << "\n" << input_matrix;
 
             // std::shared_ptr<ftensor> output_data = outputs.at(i);
             // // 初始化当前batch的输出
@@ -150,12 +150,12 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
             // std::vector<arma::fmat> outputs_matrix(kernels_per_group);
 
             for (uint32_t k = 0; k < kernels_per_group; k ++) {
-                LOG(INFO) << "这是第" << k << "个卷积\n" << kernel_matrix.at(k); // 拿出第一个展开后的卷积核
-                LOG(INFO) << "\n" << input_matrix; // 拿出展开后的输入特征图
+                // LOG(INFO) << "这是第" << k << "个卷积\n" << kernel_matrix.at(k); // 拿出第一个展开后的卷积核
+                // LOG(INFO) << "\n" << input_matrix; // 拿出展开后的输入特征图
 
                 const arma::fmat& output = kernel_matrix.at(k) * input_matrix;
 
-                LOG(INFO) << "当前卷积结果：\n" << output; // 当前卷积算子的输出
+                // LOG(INFO) << "当前卷积结果：\n" << output; // 当前卷积算子的输出
 
                 // outputs_matrix.at(k) = output;
 
@@ -165,16 +165,16 @@ void ConvLayer::Forward(const std::vector<std::shared_ptr<Tensor<float>>> &input
                 output_biased.reshape(output_h, output_w);
 
                 if (this->has_bias_) {
-                    LOG(INFO) << "当前有bias：\n";
+                    // LOG(INFO) << "当前有bias：\n";
                     std::vector<std::shared_ptr<Tensor<float>>> bias = this->bias_;
 
-                    LOG(INFO) << "-----------------bias-------------\n";
+                    // LOG(INFO) << "-----------------bias-------------\n";
                     bias.at(0)->Show();
                     bias.at(1)->Show();
                     bias.at(2)->Show();
                     
-                    LOG(INFO) << "reshape后的输出：\n" << output;
-                    LOG(INFO) << "需要加到output上的bias：\n" << bias.at(k + kernels_per_group * g)->index(0);
+                    // LOG(INFO) << "reshape后的输出：\n" << output;
+                    // LOG(INFO) << "需要加到output上的bias：\n" << bias.at(k + kernels_per_group * g)->index(0);
                     
                     output_biased += bias.at(k + kernels_per_group * g)->index(0);
                 } 
@@ -246,7 +246,7 @@ void ConvLayer::CreateInstance(const std::shared_ptr<RuntimeOperator>& op, std::
     conv_layer->set_weights(weights_values);
 }
 
-LayerRegisterWrapper kConvLayerCreateInstance("nn.Conv2d", ConvLayer::CreateInstance);
+LayerRegisterWrapper kConvCreateInstance("nn.Conv2d", ConvLayer::CreateInstance);
 
 
 }

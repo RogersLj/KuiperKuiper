@@ -1,7 +1,7 @@
 #include <glog/logging.h>
-#include "layer/relu_layer.hpp"
+#include "./relu_layer.hpp"
 #include "data/tensor_util.hpp"
-#include "factory/layer_factory.hpp"
+#include "layer/layer_factory.hpp"
 #include "runtime/runtime_operator.hpp"
 
 namespace kuiper_infer {

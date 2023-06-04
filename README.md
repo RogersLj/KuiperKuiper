@@ -177,3 +177,30 @@ init 完成对计算图ir的转换，build完成数据空间的分配
 2. 当前向推理时，会找到当前算子对应的layer创建函数，并传入当前RuntimeOperator，初始化layer信息，然后将初始化好的layer放进RuntimeOperator里。初始化的信息包括具体的参数和权重。这部分已经在RuntimeOperator类的params和attrs里。
 3. 本来layer的构造函数由原本的Operator类进行构造。现在没有了中间的Operator类，因此首先需要修改我们layer的构造函数，构造参数会由RuntimeOperator的params和attrs信息进行构造。如果该层有weghts和bias，则继承与ParamLayer类，里面的weights和bias用于存储数据。如果是没有weights和bias的layer，则直接在继承类里保存相应信息。
 4. 最后每个算子的creator函数，就是CreateInstance函数，通过传入的RuntimeOperator类返回当前初始化好的layer实例。该函数就是被放入注册表，在推断时查找的创建layer的函数。
+
+## refractor
+
+重构之后需要再继续添加算子，也就是layer
+整理一下思路，添加算子的过程
+首先就是在 source/layer 下分别创建 .hpp 和.cpp 文件
+然后首先考虑，该layer是否有权重参数，是否继承于paramlayer或基layer
+
+拿linear层考虑，是有weight和bias的，因此继承自paramlayer
+然后思考该算子需要的参数，因为weights和bias保存在paramlayer
+因此只考虑超参数 has_bias
+显然就是 in_features 和 out_features
+
+然后就开始定义三个主函数：
+1. 构造函数，用参数初始化
+2. Forward函数，用于计算
+3. CreateInstance函数，作为注册表的creator
+
+最后在 .cpp 文件完成三个函数，并添加注册表
+
+对于带weights和bias的layer
+weights和bias也是该layer的参数，只是信息存储在父类
+因此在构造函数里需要对其进行初始化
+因为暂时不知道具体的值，因此初始化只是分配weights和bias的空间
+
+注意layer的creator是一个static成员函数，因为我们希望所有相同算子的layer的creator其实是一样的，只是参数不同而已
+

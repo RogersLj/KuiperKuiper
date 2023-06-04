@@ -7,7 +7,7 @@
 #include <map>
 #include <memory>
 #include <string>
-#include "factory/layer_factory.hpp"
+#include "layer/layer_factory.hpp"
 #include "runtime_operand.hpp"
 #include "runtime_attr.hpp"
 #include "runtime_param.hpp"

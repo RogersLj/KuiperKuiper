@@ -281,6 +281,13 @@ void Tensor<float>::Reshape(const std::vector<uint32_t>& shape, bool row_major) 
     }
 }
 
+const std::vector<uint32_t>& Tensor<float>::raw_shape() const {
+    CHECK(!this->raw_shape_.empty());
+    CHECK_LE(this->raw_shape_.size(), 3);
+    CHECK_GE(this->raw_shape_.size(), 1);
+    return this->raw_shape_;
+}
+
 const float* Tensor<float>::raw_ptr() const {
   CHECK(!this->data_.empty());
   return this->data_.memptr();

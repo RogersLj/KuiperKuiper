@@ -1,7 +1,7 @@
 #include <glog/logging.h>
-#include "layer/maxpooling_layer.hpp"
+#include "./maxpooling_layer.hpp"
 #include "data/tensor_util.hpp"
-#include "factory/layer_factory.hpp"
+#include "layer/layer_factory.hpp"
 
 namespace kuiper_infer {
     
@@ -83,6 +83,6 @@ void MaxPoolingLayer::CreateInstance(const std::shared_ptr<RuntimeOperator> &op,
 }
 
 // 注册池化层
-LayerRegisterWrapper kMaxPoolingLayer("nn.MaxPool2d", MaxPoolingLayer::CreateInstance);
+LayerRegisterWrapper kMaxPoolingCreateInstance("nn.MaxPool2d", MaxPoolingLayer::CreateInstance);
 
 }
